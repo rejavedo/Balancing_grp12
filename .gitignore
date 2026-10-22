@@ -1,0 +1,16 @@
+build/
+install/
+log/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+*.bag
+*.db3
+*.mcap
+sandbox_trial*/
+.env
+.env.*
+*_calibration.yaml
+*mission_result.json
+scan_audit.json

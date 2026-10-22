@@ -1,0 +1,6 @@
+[console_scripts]
+mission = balancing_search.mission:main
+scan_audit = balancing_search.scan_audit:main
+target_localizer = balancing_search.localizer:main
+velocity_guard = balancing_search.guard:main
+visualizer = balancing_search.visualizer:main

@@ -1,0 +1,47 @@
+# Verify hardware/calibration before enabling. See docs/REVISION.md.
+search_mission:
+  ros__parameters:
+    base_frame: base_link
+    clearance: 0.42
+    spacing: 1.2
+    headings: 6
+    dwell: 3.5
+    goal_timeout: 60.0
+    mission_timeout: 900.0
+    home_tolerance: 0.2
+    perception_timeout: 4.0
+    report_path: ~/balancing_mission_result.json
+    transit_clearance: 0.38
+    max_seed_distance: 1.0
+    heading_overlap: 0.15
+    max_xy_variance: 0.3
+    max_yaw_variance: 0.15
+    report_xy_variance: 0.1
+    report_yaw_variance: 0.1
+    amcl_timeout: 15.0
+    nomotion_interval: 5.0
+target_localizer:
+  ros__parameters:
+    target_class: CHANGE_ME
+    calibration_verified: false
+    confidence: 0.65
+    max_age: 3.0
+    ground_z: 0.0
+    max_range: 3.0
+    confirm_count: 4
+    confirm_radius: 0.2
+    confirm_window: 6.0
+    map_frame: map
+velocity_guard:
+  ros__parameters:
+    hardware_verified: false
+    cmd_timeout: 0.4
+    heartbeat_timeout: 0.6
+    scan_timeout: 0.5
+    stop_range: 0.38
+    max_v: 0.15
+    max_w: 0.3
+    acceleration: 0.15
+    angular_acceleration: 0.4
+    max_invalid_fraction: 0.0
+    max_invalid_gap_deg: 0.0
