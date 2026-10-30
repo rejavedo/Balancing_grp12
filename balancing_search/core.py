@@ -18,6 +18,15 @@ def rotation(q):
                      [2*(x*z-y*w), 2*(y*z+x*w), 1-2*(x*x+y*y)]])
 
 
+# TASK 07: Optical axes (x right, y down, z forward) -> body-style camera_link (x forward, y left, z up).
+OPTICAL_TO_LINK = np.array([[0., 0., 1.], [-1., 0., 0.], [0., -1., 0.]])
+
+
+# TASKS 03, 07: Compose two (R, t) transforms: a<-b then b<-c gives a<-c.
+def compose(R_ab, t_ab, R_bc, t_bc):
+    return R_ab @ R_bc, R_ab @ np.asarray(t_bc, dtype=float) + np.asarray(t_ab, dtype=float)
+
+
 # TASK 07: Camera ray / ground-plane intersection.
 def ground_hit(ray, origin, rot, ground_z=0., max_range=4., min_down=0.10):
     """Intersect a camera optical ray with the map horizontal ground plane."""

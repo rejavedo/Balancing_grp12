@@ -2,7 +2,7 @@
 import math
 import numpy as np
 import unittest
-from balancing_search.core import coverage, rotation, ground_hit, Consensus, limited_twist
+from balancing_search.core import coverage, rotation, ground_hit, Consensus, limited_twist, OPTICAL_TO_LINK
 
 
 def test_optical_to_ground():
@@ -134,6 +134,21 @@ def test_scan_all_invalid_rejected():
     from balancing_search.core import checked_scan
     for value in (0.,float('nan'),float('inf')):
         assert checked_scan([value]*360,.05,8.,math.pi/180,.1,2.)[0] is None
+
+
+def test_camera_link_forward_ray_hits_floor_ahead():
+    # Pixel below the principal point, camera_link 0.27 m up, robot at map (1,2) facing +y.
+    ray=OPTICAL_TO_LINK@np.array([0.,0.5,1.])
+    yaw=np.pi/2; q=[0,0,np.sin(yaw/2),np.cos(yaw/2)]
+    p=ground_hit(ray,[1.,2.,.27],rotation(q))
+    assert abs(p[0]-1.)<1e-9 and abs(p[1]-(2+.54))<1e-9 and abs(p[2])<1e-9
+
+
+def test_compose_map_odom_base():
+    from balancing_search.core import compose
+    yaw=np.pi/2; Rz=rotation([0,0,np.sin(yaw/2),np.cos(yaw/2)])
+    R,t=compose(Rz,[1.,0.,0.],np.eye(3),[2.,0.,0.])  # base 2 m ahead in odom, odom rotated 90 deg in map
+    assert np.allclose(t,[1.,2.,0.]) and np.allclose(R,Rz)
 
 
 if __name__ == "__main__":

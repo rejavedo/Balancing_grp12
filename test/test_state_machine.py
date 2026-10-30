@@ -25,8 +25,7 @@ stub('rclpy.qos',QoSProfile=object,DurabilityPolicy=object,ReliabilityPolicy=obj
 stub('action_msgs'); stub('action_msgs.msg',GoalStatus=NS(STATUS_SUCCEEDED=4))
 stub('nav2_msgs'); stub('nav2_msgs.action',NavigateToPose=object)
 stub('nav_msgs'); stub('nav_msgs.msg',OccupancyGrid=object)
-stub('geometry_msgs'); stub('geometry_msgs.msg',PointStamped=Message,PoseStamped=Message,PoseWithCovarianceStamped=Message,PoseArray=Message,Pose=Message)
-stub('sensor_msgs'); stub('sensor_msgs.msg',CameraInfo=Message)
+stub('geometry_msgs'); stub('geometry_msgs.msg',PointStamped=Message,PoseStamped=Message,PoseWithCovarianceStamped=Message,PoseArray=Message,Pose=Message,Twist=Message)
 stub('std_msgs'); stub('std_msgs.msg',Bool=Message,String=Message)
 stub('std_srvs'); stub('std_srvs.srv',Trigger=object,Empty=object)
 stub('tf2_ros',Buffer=object,TransformListener=object,TransformException=Exception)
@@ -47,8 +46,9 @@ def node():
     n.result_future=Future(); n.send_future=None; n.target=None
     n.transition=lambda state,detail='': setattr(n,'state',state)
     n.home=(1.,2.,0.); n.return_tries=2
-    n.handle=NS(cancel_goal_async=lambda:Future())
+    n.goal_handle=NS(cancel_goal_async=lambda:Future())
     n.index=0; n.failures=0
+    n.cmd=Publisher(); n.stop_until=-float('inf'); n.created=time.monotonic(); n.next_try=0.
     return n
 
 
@@ -124,12 +124,18 @@ class StateTests(unittest.TestCase):
             self.assertFalse(n.localized()) # Latched old sample is still stale.
         finally: module.Time=old
 
-    def test_guard_not_ready_blocks_start(self):
-        n=node(); n.state='IDLE'; n.guard_ready=False; n.guard_time=time.monotonic()
+    def test_start_needs_map(self):
+        n=node(); n.state='IDLE'; n.map=None; n.client=NS(server_is_ready=lambda:True)
         response=NS(success=False,message='')
         n.start(None,response)
         self.assertFalse(response.success)
-        self.assertIn('guard not ready',response.message)
+        self.assertIn('Need map',response.message)
+
+    def test_fault_holds_robot_still(self):
+        n=node(); n.pose=lambda:None; n.tick()
+        self.assertEqual(n.state,'FAULT')
+        n.tick(); self.assertEqual(len(n.cmd.values),1)
+        self.assertFalse(hasattr(n.cmd.values[0],'linear'))  # stub Twist() == zero command
 
 
 if __name__=='__main__': unittest.main(verbosity=2)
