@@ -43,6 +43,43 @@ def ground_hit(ray, origin, rot, ground_z=0., max_range=4., min_down=0.10):
 
 
 # TASK 05: Reachable map viewpoint generation.
+def _start_seed(free, transit, local, resolution, clearance):
+    """Connect the continuous start to a nearby transit cell without crossing obstacles."""
+    height, width = free.shape
+    extent = np.array([width, height]) * resolution
+    # A one-cell neighbourhood plus the required clearance covers every candidate link.
+    reach = clearance + 2 * resolution
+    lo = np.maximum(0, np.floor((local - reach) / resolution).astype(int))
+    hi = np.minimum([width, height], np.ceil((local + reach) / resolution).astype(int))
+    if np.any(local < 0) or np.any(local >= extent):
+        raise ValueError('Start is outside the saved map; check initial pose and map origin')
+    rows, cols = np.where(~free[lo[1]:hi[1], lo[0]:hi[0]])
+    obstacle_lo = (np.column_stack((cols, rows)) + lo) * resolution
+    obstacle_hi = obstacle_lo + resolution
+
+    def margin(end):
+        # Bound the entire link by its axis-aligned rectangle in map-local coordinates.
+        low, high = np.minimum(local, end), np.maximum(local, end)
+        border = min(low.min(), (extent - high).min())
+        if not len(obstacle_lo):
+            return border
+        gap = np.maximum(0, np.maximum(obstacle_lo - high, low - obstacle_hi))
+        return min(border, np.linalg.norm(gap, axis=1).min())
+
+    if margin(local) <= clearance:
+        raise ValueError(f'Start violates physical transit clearance of {clearance:.3f} m; '
+                         'check start pose against walls, unknown cells and map boundary')
+    ix, iy = np.floor(local / resolution).astype(int)
+    candidates = [(y, x) for y in range(max(0, iy-1), min(height, iy+2))
+                  for x in range(max(0, ix-1), min(width, ix+2)) if transit[y, x]]
+    def centre(cell):
+        return (np.array(cell[::-1]) + .5) * resolution
+    for cell in sorted(candidates, key=lambda cell: np.linalg.norm(centre(cell) - local)):
+        if margin(centre(cell)) > clearance:
+            return cell
+    raise ValueError('Start has clearance but no safe connection to a neighbouring transit cell')
+
+
 def coverage(data, resolution, origin, start, clearance, spacing,
              transit_clearance=None, max_seed_distance=1.0):
     """Erode free map, retain start component, greedily cover its cell centres.
@@ -62,10 +99,8 @@ def coverage(data, resolution, origin, start, clearance, spacing,
     c, s = math.cos(origin[2]), math.sin(origin[2])
     R = np.array([[c,-s],[s,c]])
     local = R.T @ (np.asarray(start)-origin[:2])
-    ix, iy = np.floor(local/resolution).astype(int)
     transit = free & (distance*resolution > transit_clearance + resolution/math.sqrt(2))
-    if not (0 <= iy < transit.shape[0] and 0 <= ix < transit.shape[1] and transit[iy,ix]):
-        raise ValueError('Start violates physical transit clearance; check footprint/pose')
+    iy, ix = _start_seed(free, transit, local, resolution, transit_clearance)
     labels, _ = label(transit)  # Never snap across walls or unknown cells.
     rows, cols = np.where(safe & (labels == labels[iy,ix]))
     if len(rows) == 0:
