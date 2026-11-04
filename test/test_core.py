@@ -75,6 +75,16 @@ def test_near_wall_uses_reachable_viewpoint():
     assert pts and pts[0][0] > .5
 
 
+def test_start_clearance_uses_pose_within_cell():
+    arena = np.zeros((40, 40))
+    arena[:, 9] = -1  # unknown strip ends at x=0.60 m
+    # Both poses occupy the same grid cell. Only one clears the strip by 0.20 m.
+    pts = coverage(arena, .06, (0, 0, 0), (.805, 1.2), .30, .9, .20)
+    assert pts and all(x > .90 for x, y in pts)
+    with unittest.TestCase().assertRaisesRegex(ValueError, 'physical transit clearance'):
+        coverage(arena, .06, (0, 0, 0), (.781, 1.2), .30, .9, .20)
+
+
 def test_seed_never_crosses_wall():
     a=np.zeros((40,40)); a[:,9]=100
     # Narrow left chamber fits transit but has no safe viewpoint. The nearest

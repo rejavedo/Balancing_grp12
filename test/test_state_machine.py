@@ -39,6 +39,7 @@ class Publisher:
 
 def node():
     n=Mission.__new__(Mission)
+    n.localization_issue='test TF failure'
     n.state='NAVIGATING'; n.heartbeat=Publisher(); n.goal_role='search'
     n.perception=time.monotonic(); n.sent=time.monotonic(); n.started=time.monotonic()
     n.p=lambda key:{'perception_timeout':4.,'goal_timeout':90.,'mission_timeout':1200.,'home_tolerance':.2}[key]
@@ -118,10 +119,15 @@ class StateTests(unittest.TestCase):
             n.amcl_time=time.monotonic()
             self.assertTrue(n.localized())
             self.assertFalse(n.localized(for_report=True))
+            self.assertIn('AMCL x variance', n.localization_issue)
             cov[0]=cov[7]=.02
             self.assertTrue(n.localized(for_report=True))
             n.amcl.header.stamp=80*10**9
             self.assertFalse(n.localized()) # Latched old sample is still stale.
+            self.assertIn('stamp age', n.localization_issue)
+            n.amcl_time -= 20
+            self.assertFalse(n.localized())
+            self.assertIn('no /amcl_pose update', n.localization_issue)
         finally: module.Time=old
 
     def test_start_needs_map(self):
