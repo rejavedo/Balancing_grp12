@@ -40,6 +40,7 @@ class Mission(Node):
                         report_path='~/balancing_mission_result.json').items():
             self.declare_parameter(k,v)
         self.p=lambda k:self.get_parameter(k).value
+        self.localization_issue=''
         self.state='IDLE'; self.map=None; self.amcl=None; self.amcl_time=-math.inf
         self.created=time.monotonic(); self.next_try=0.; self.stop_until=-math.inf
         self.perception=-math.inf; self.home=None; self.target=None; self.reported=False
@@ -102,25 +103,45 @@ class Mission(Node):
         try:
             mo=self.buffer.lookup_transform('map',self.p('odom_frame'),Time())
             ob=self.buffer.lookup_transform(self.p('odom_frame'),self.p('base_frame'),Time())
-        except TransformException: return None
+        except TransformException as exc:
+            self.localization_issue=f'TF lookup failed: {exc}'
+            return None
         now=self.get_clock().now()
         age=lambda tf:(now-Time.from_msg(tf.header.stamp)).nanoseconds/1e9
         stamp=Time.from_msg(ob.header.stamp).nanoseconds
-        if age(mo) > self.p('amcl_timeout') or (stamp != 0 and not age(ob) < 1.): return None
+        mo_age, ob_age = age(mo), age(ob)
+        if mo_age > self.p('amcl_timeout'):
+            self.localization_issue=f"map -> {self.p('odom_frame')} TF age {mo_age:.2f}s exceeds {self.p('amcl_timeout')}s"
+            return None
+        if stamp != 0 and ob_age >= 1.:
+            self.localization_issue=f"{self.p('odom_frame')} -> {self.p('base_frame')} TF age {ob_age:.2f}s reached 1.0s"
+            return None
         q=lambda tf:[tf.transform.rotation.x,tf.transform.rotation.y,tf.transform.rotation.z,tf.transform.rotation.w]
         v=lambda tf:[tf.transform.translation.x,tf.transform.translation.y,tf.transform.translation.z]
         R,t=compose(rotation(q(mo)),v(mo),rotation(q(ob)),v(ob))
         return (float(t[0]),float(t[1]),math.atan2(R[1,0],R[0,0]))
     # TASK 03: Check localization age and covariance.
     def localized(self,for_report=False):
-        if self.amcl is None or time.monotonic()-self.amcl_time > self.p('amcl_timeout'): return False
+        timeout = self.p('amcl_timeout')
+        if self.amcl is None:
+            self.localization_issue='no /amcl_pose received'
+            return False
+        received_age = time.monotonic() - self.amcl_time
+        if received_age > timeout:
+            self.localization_issue=f'no /amcl_pose update for {received_age:.2f}s (limit {timeout}s)'
+            return False
         age=(self.get_clock().now()-Time.from_msg(self.amcl.header.stamp)).nanoseconds/1e9
-        if not 0 <= age <= self.p('amcl_timeout'): return False
+        if not 0 <= age <= timeout:
+            self.localization_issue=f'/amcl_pose stamp age {age:.3f}s outside [0, {timeout}]s'
+            return False
         cov=self.amcl.pose.covariance
         xy=self.p('report_xy_variance' if for_report else 'max_xy_variance')
         ya=self.p('report_yaw_variance' if for_report else 'max_yaw_variance')
-        return all(math.isfinite(cov[i]) and 0 <= cov[i] <= limit
-                   for i,limit in ((0,xy),(7,xy),(35,ya)))
+        for axis, i, limit in (('x',0,xy),('y',7,xy),('yaw',35,ya)):
+            if not math.isfinite(cov[i]) or not 0 <= cov[i] <= limit:
+                self.localization_issue=f'AMCL {axis} variance {cov[i]:.4g} outside [0, {limit}]'
+                return False
+        return True
     # TASKS 05, 08, 09: Check readiness, generate search goals and capture home.
     def start(self,req,res):
         if self.state != 'IDLE':
@@ -226,7 +247,9 @@ class Mission(Node):
                 h=self.send_future.result(); self.send_future=None
                 if h is not None and h.accepted: h.cancel_goal_async()
             return
-        if self.pose() is None or not self.localized(): self.fault('Localization lost'); return
+        if self.pose() is None or not self.localized():
+            self.fault('Localization lost: '+self.localization_issue)
+            return
         searching=self.goal_role != 'return'
         if searching and now-self.perception > self.p('perception_timeout'):
             self.fault('Perception stale'); return
