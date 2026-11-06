@@ -1,5 +1,5 @@
 # balancing_search/config/nav2.yaml — copy of balance_navigation/config/nav2_core_params.yaml (lab, 62b88f3).
-# Only change: global_costmap plans on the saved map (static + inflation, no live LiDAR layer) and inflates
+# Global costmap plans on the saved map (static + inflation, no live LiDAR layer) and inflates
 # wider so paths run down the middle of narrow corridors. Reason: the arena gaps leave ~0.15 m clearance;
 # with the LiDAR layer plus AMCL error the 0.12 m robot radius closed them ("GridBased: failed to create
 # plan", balance17 2026-11-04). The local costmap keeps the LiDAR layer for collision avoidance.
@@ -58,7 +58,7 @@ controller_server:
       # RotateToGoal.scale: 32.0
       Oscillation.scale: 1.0
 
-      debug_trajectory_details: True
+      debug_trajectory_details: False  # avoid per-trajectory debug work on the Pi
       min_vel_x: -0.05
       min_vel_y: 0.0
       max_vel_x: 0.25
@@ -179,10 +179,10 @@ planner_server:
     planner_plugins: ["GridBased"]
     GridBased:
       plugin: "nav2_navfn_planner/NavfnPlanner"
-      allow_unknown: true
-      # Prevent an excessively strict A* search from getting stuck
-      tolerance: 0.5
-      use_astar: false
+      allow_unknown: false  # match coverage: unknown space is not navigable
+      # Do not silently substitute an endpoint half a metre from a view/home goal.
+      tolerance: 0.15
+      use_astar: true
 
 behavior_server:
   ros__parameters:
