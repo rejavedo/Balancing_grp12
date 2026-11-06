@@ -3,11 +3,11 @@
 package's config/amcl.yaml (lab localization params with the rotation-noise/scan-model changes)."""
 import os
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, TimerAction, LogInfo, GroupAction
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, TimerAction, LogInfo
 from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
-from launch_ros.actions import Node, SetRemap
+from launch_ros.actions import Node
 from ament_index_python.packages import get_package_share_directory
 
 
@@ -47,9 +47,10 @@ def generate_launch_description():
             include('nav2_bringup','localization_launch.py',IfCondition(arg('with_nav')),
                     map=arg('map'),use_sim_time='false',params_file=arg('amcl_params'))]),
         TimerAction(period=9.,actions=[LogInfo(msg='[mission] Nav2'),
-            GroupAction([SetRemap(src='cmd_vel_nav',dst='cmd_vel'),SetRemap(src='cmd_vel_smoothed',dst='cmd_vel'),
-                include('nav2_bringup','navigation_launch.py',use_sim_time='false',params_file=arg('nav_params'))],
-                condition=IfCondition(arg('with_nav')))]),
+            # Humble bringup already wires cmd_vel -> cmd_vel_nav -> smoother -> cmd_vel.
+            # Use its remappings directly, without redundant enclosing overrides.
+            include('nav2_bringup','navigation_launch.py',IfCondition(arg('with_nav')),
+                    use_sim_time='false',params_file=arg('nav_params'))]),
         # YOLO loading saturates the CPU; start it after the Nav2 lifecycle bringup (DDS service replies time out otherwise).
         TimerAction(period=16.,actions=nodes),
         TimerAction(period=18.,actions=[mission]),

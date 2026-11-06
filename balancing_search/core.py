@@ -87,8 +87,8 @@ def coverage(data, resolution, origin, start, clearance, spacing,
     remaining = cand.copy()
     current = node[iy, ix]
     goals = []
+    d = dijkstra(graph, directed=False, indices=current)
     while remaining.any():
-        d = dijkstra(graph, directed=False, indices=current)
         reach = remaining & np.isfinite(d)
         if not reach.any():
             break
@@ -99,8 +99,10 @@ def coverage(data, resolution, origin, start, clearance, spacing,
         near = np.flatnonzero(remaining & (dk <= spacing/2))
         k = near[np.lexsort((dk[near], -room[near]))[0]]
         goals.append(tuple(xy[k]))
-        remaining[dijkstra(graph, directed=False, indices=k, limit=spacing) <= spacing] = False
-        current = k
+        # One distance field serves both coverage removal and the next nearest
+        # viewpoint query; avoid traversing the same neighbourhood twice.
+        d = dijkstra(graph, directed=False, indices=k)
+        remaining[d <= spacing] = False
     return goals
 
 

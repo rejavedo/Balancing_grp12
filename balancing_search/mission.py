@@ -166,6 +166,8 @@ class Mission(Node):
     def on_target(self,msg):
         if self.state not in ('SEARCH','NAVIGATING','DWELL','SENDING') or self.goal_role == 'return': return
         if msg.header.frame_id != 'map' or Time.from_msg(msg.header.stamp).nanoseconds < self.target_after: return
+        age=(self.get_clock().now()-Time.from_msg(msg.header.stamp)).nanoseconds/1e9
+        if not 0 <= age <= self.p('perception_timeout'): return
         if not np.isfinite([msg.point.x,msg.point.y,msg.point.z]).all(): return
         if not self.localized(for_report=True) or self.pose() is None: return
         if self.target is None:

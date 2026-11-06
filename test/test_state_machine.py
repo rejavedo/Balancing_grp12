@@ -125,6 +125,28 @@ class StateTests(unittest.TestCase):
             self.assertFalse(n.localized()) # Latched old sample is still stale.
         finally: module.Time=old
 
+    def test_target_report_rejects_old_future_and_wrong_frame(self):
+        module=sys.modules['balancing_search.mission']
+        old=module.Time
+        class Stamp:
+            def __init__(self,n): self.nanoseconds=n
+            def __sub__(self,other): return Stamp(self.nanoseconds-other.nanoseconds)
+        module.Time=NS(from_msg=lambda stamp:Stamp(stamp))
+        try:
+            n=node(); n.target_after=90*10**9
+            n.get_clock=lambda:NS(now=lambda:Stamp(100*10**9))
+            n.localized=lambda for_report=False:True
+            n.get_logger=lambda:NS(info=lambda text:None)
+            n.report=Publisher(); saved=[]; n.save_report=lambda outcome:saved.append(outcome)
+            for stamp,frame in [(89,'map'),(95,'map'),(101,'map'),(100,'odom')]:
+                n.on_target(NS(header=NS(stamp=stamp*10**9,frame_id=frame),point=NS(x=1.,y=2.,z=0.)))
+                self.assertIsNone(n.target)
+            n.on_target(NS(header=NS(stamp=99*10**9,frame_id='map'),point=NS(x=1.,y=2.,z=0.)))
+            self.assertIsNotNone(n.target)
+            self.assertEqual(len(n.report.values),1)
+            self.assertEqual(saved,['TARGET_REPORTED'])
+        finally: module.Time=old
+
     def test_start_needs_map(self):
         n=node(); n.state='IDLE'; n.map=None; n.client=NS(server_is_ready=lambda:True)
         response=NS(success=False,message='')
