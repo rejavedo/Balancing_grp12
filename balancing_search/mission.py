@@ -141,11 +141,11 @@ class Mission(Node):
                          self.p('max_seed_distance'))
             fx=1./(2*math.tan(math.radians(self.p('hfov_deg'))/2))  # unit-width image
             n=heading_count(self.p('headings'),1.,fx,self.p('heading_overlap'))
-            self.goals=[(x,y,2*math.pi*k/n) for x,y in pts for k in range(n)]
+            self.goals=view_goals(pts,home,n)
         except ValueError as e:
             res.message=str(e); return res
         views=PoseArray(); views.header.frame_id='map'; views.header.stamp=self.get_clock().now().to_msg()
-        for x,y,theta in self.goals:
+        for x,y,theta,_ in self.goals:
             pose=Pose(); pose.position.x=float(x); pose.position.y=float(y)
             pose.orientation.z=math.sin(theta/2); pose.orientation.w=math.cos(theta/2)
             views.poses.append(pose)
@@ -244,7 +244,7 @@ class Mission(Node):
                 if not self.goal_handle.accepted:
                     self.goal_handle=None
                     if self.goal_role=='return': self.fault('Return goal rejected')
-                    else: self.failures+=1; self.index+=1; self.transition('SEARCH')
+                    else: self.skip_viewpoint()
                 else:
                     self.result_future=self.goal_handle.get_result_async(); self.transition('NAVIGATING',self.goal_role)
         elif self.state == 'NAVIGATING':
@@ -259,7 +259,7 @@ class Mission(Node):
                 elif self.goal_role=='return':
                     if self.return_tries < 2: self.return_home()
                     else: self.fault('Return timed out')
-                else: self.failures+=1; self.index+=1; self.transition('SEARCH')
+                else: self.skip_viewpoint()
             elif now-self.cancel_time > 5.: self.fault('Cancellation did not complete')
         elif self.state == 'DWELL':
             if self.target is not None: self.return_home()
@@ -278,8 +278,23 @@ class Mission(Node):
         elif self.target is not None: self.return_home()
         elif result.status==GoalStatus.STATUS_SUCCEEDED:
             self.dwell_start=time.monotonic(); self.transition('DWELL')
-        else:
-            self.failures+=1; self.index+=1; self.transition('SEARCH')
+        else: self.skip_viewpoint()
+    # A failed goal means the viewpoint is unreachable now; its other headings would fail too.
+    def skip_viewpoint(self):
+        self.failures+=1
+        vp=self.goals[self.index][3] if self.index < len(self.goals) else None
+        while self.index < len(self.goals) and self.goals[self.index][3]==vp: self.index+=1
+        self.transition('SEARCH')
+
+
+def view_goals(points,home,n):
+    """(x, y, yaw, viewpoint) per heading; the first heading of each viewpoint faces the way the robot arrives."""
+    goals=[]; prev=home[:2]; heading=home[2]
+    for i,(x,y) in enumerate(points):
+        if math.hypot(x-prev[0],y-prev[1]) > .2: heading=math.atan2(y-prev[1],x-prev[0])
+        goals+=[(x,y,math.remainder(heading+2*math.pi*k/n,2*math.pi),i) for k in range(n)]
+        prev=(x,y); heading=goals[-1][2]
+    return goals
 
 
 def main():
@@ -287,4 +302,6 @@ def main():
     try: rclpy.spin(n)
     except KeyboardInterrupt: pass
     finally:
-        n.heartbeat.publish(Bool(data=False)); n.destroy_node(); rclpy.shutdown()
+        if rclpy.ok(): n.heartbeat.publish(Bool(data=False))
+        n.destroy_node()
+        if rclpy.ok(): rclpy.shutdown()

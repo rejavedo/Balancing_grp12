@@ -151,6 +151,28 @@ def test_compose_map_odom_base():
     assert np.allclose(t,[1.,2.,0.]) and np.allclose(R,Rz)
 
 
+def test_order_follows_corridor_not_straight_line():
+    # U-shaped corridor: wall between the arms. The far arm is close in a straight line but
+    # far by path; it must be visited last, and the wall must not merge viewpoints.
+    a=np.zeros((60,60)); a[0,:]=a[-1,:]=a[:,0]=a[:,-1]=100; a[28:32,0:48]=100
+    pts=coverage(a,.05,(0,0,0),(.4,.6),.12,.9,transit_clearance=.10)
+    ys=[y for x,y in pts]
+    first_upper=next(i for i,y in enumerate(ys) if y > 1.6)
+    assert all(y < 1.4 for y in ys[:first_upper]) and all(y > 1.4 for y in ys[first_upper:])
+    assert any(x < 1. and y > 1.6 for x,y in pts)  # upper-left still covered despite wall
+
+
+def test_arena_order_is_path_order():
+    import os, yaml
+    m=os.path.join(os.path.dirname(__file__),'data','arena.yaml')
+    if not os.path.exists(m): return
+    import cv2
+    y=yaml.safe_load(open(m)); img=cv2.imread(m.replace('.yaml','.pgm'),-1)
+    p=(255-img.astype(float))/255; d=np.full(img.shape,-1); d[p>.65]=100; d[p<.25]=0
+    pts=coverage(np.flipud(d),y['resolution'],y['origin'],(0.,0.),.12,.9,transit_clearance=.10)
+    assert len(pts)==5 and pts[1][1] > 0  # second viewpoint is the top-right room, not the lower room behind the wall
+
+
 if __name__ == "__main__":
     suite=unittest.TestSuite(unittest.FunctionTestCase(v) for k,v in list(globals().items()) if k.startswith("test_"))
     result=unittest.TextTestRunner(verbosity=2).run(suite)

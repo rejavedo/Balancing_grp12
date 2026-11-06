@@ -4,6 +4,7 @@ import importlib
 import sys
 import time
 import types
+import math
 import unittest
 from concurrent.futures import Future
 from types import SimpleNamespace as NS
@@ -136,6 +137,16 @@ class StateTests(unittest.TestCase):
         self.assertEqual(n.state,'FAULT')
         n.tick(); self.assertEqual(len(n.cmd.values),1)
         self.assertFalse(hasattr(n.cmd.values[0],'linear'))  # stub Twist() == zero command
+
+    def test_failed_goal_skips_rest_of_viewpoint(self):
+        n=node(); n.goals=[(0,0,0,0),(0,0,1,0),(0,0,2,0),(1,1,0,1)]; n.index=1
+        n.result_future.set_result(NS(status=6)); n.complete_goal()
+        self.assertEqual((n.state,n.index,n.failures),('SEARCH',3,1))
+
+    def test_view_goals_face_arrival_direction(self):
+        g=sys.modules['balancing_search.mission'].view_goals([(0.,0.),(0.,2.)],(0.,0.,0.3),6)
+        self.assertEqual(len(g),12); self.assertAlmostEqual(g[0][2],0.3)
+        self.assertAlmostEqual(g[6][2],math.pi/2); self.assertEqual(g[6][3],1)
 
 
 if __name__=='__main__': unittest.main(verbosity=2)

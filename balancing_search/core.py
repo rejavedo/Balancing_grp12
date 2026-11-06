@@ -4,6 +4,8 @@ import math
 from collections import deque
 import numpy as np
 from scipy.ndimage import distance_transform_edt, label
+from scipy.sparse import csr_matrix
+from scipy.sparse.csgraph import dijkstra
 
 
 # TASK 07: Camera orientation transformation.
@@ -74,16 +76,53 @@ def coverage(data, resolution, origin, start, clearance, spacing,
     pts = pts @ R.T + origin[:2]
     if np.min(np.linalg.norm(pts-np.asarray(start), axis=1)) > max_seed_distance:
         raise ValueError('Nearest reachable viewpoint exceeds max_seed_distance')
-    remaining = np.ones(len(pts), dtype=bool)
-    current = np.asarray(start)
+    # Path (geodesic) distances inside the reachable component: order and spacing follow the
+    # corridors the robot drives, not straight lines through walls.
+    region = labels == labels[iy, ix]
+    graph, node = _grid_graph(region, resolution)
+    cand = np.zeros(graph.shape[0], dtype=bool); cand[node[rows, cols]] = True
+    room = np.zeros(graph.shape[0]); room[node[rows, cols]] = distance[rows, cols]
+    xy = np.zeros((graph.shape[0], 2)); r_all, c_all = np.where(region)
+    xy[node[r_all, c_all]] = (np.column_stack((c_all+.5, r_all+.5))*resolution) @ R.T + origin[:2]
+    remaining = cand.copy()
+    current = node[iy, ix]
     goals = []
     while remaining.any():
-        ids = np.flatnonzero(remaining)
-        k = ids[np.argmin(np.linalg.norm(pts[ids]-current, axis=1))]
-        current = pts[k]
-        goals.append(tuple(current))
-        remaining[np.linalg.norm(pts-current, axis=1) <= spacing] = False
+        d = dijkstra(graph, directed=False, indices=current)
+        reach = remaining & np.isfinite(d)
+        if not reach.any():
+            break
+        ids = np.flatnonzero(reach)
+        k = ids[np.argmin(d[ids])]
+        # Centre the viewpoint: most room among remaining candidates within spacing/2 (path) of k.
+        dk = dijkstra(graph, directed=False, indices=k, limit=spacing/2)
+        near = np.flatnonzero(remaining & (dk <= spacing/2))
+        k = near[np.lexsort((dk[near], -room[near]))[0]]
+        goals.append(tuple(xy[k]))
+        remaining[dijkstra(graph, directed=False, indices=k, limit=spacing) <= spacing] = False
+        current = k
     return goals
+
+
+def _grid_graph(region, resolution):
+    """Sparse graph of a cell mask: 4-neighbours, plus diagonals only when both sides are free."""
+    node = -np.ones(region.shape, dtype=int)
+    node[region] = np.arange(int(region.sum()))
+    h, w = region.shape
+    src, dst, cost = [], [], []
+    for dr, dc in ((0, 1), (1, 0), (1, 1), (1, -1)):
+        a = region[0:h-dr, max(0, -dc):w-max(0, dc)]
+        b = region[dr:h, max(0, dc):w-max(0, -dc)]
+        ok = a & b
+        if dr and dc:  # no corner cutting
+            ok &= region[0:h-dr, max(0, dc):w-max(0, -dc)] & region[dr:h, max(0, -dc):w-max(0, dc)]
+        r, c = np.nonzero(ok)
+        src.append(node[0:h-dr, max(0, -dc):w-max(0, dc)][r, c])
+        dst.append(node[dr:h, max(0, dc):w-max(0, -dc)][r, c])
+        cost.append(np.full(len(r), resolution*math.hypot(dr, dc)))
+    src, dst, cost = map(np.concatenate, (src, dst, cost))
+    n = int(region.sum())
+    return csr_matrix((cost, (src, dst)), shape=(n, n)), node
 
 
 class Consensus:

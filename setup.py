@@ -15,4 +15,5 @@ setup(name='balancing_search', version='0.3.0', packages=['balancing_search'],
           'visualizer = balancing_search.visualizer:main',
           'scan_audit = balancing_search.scan_audit:main',
           'target_localizer = balancing_search.localizer:main',
-          'velocity_guard = balancing_search.guard:main']})
+          'velocity_guard = balancing_search.guard:main',
+          'map_viewer = balancing_search.map_viewer:main']})

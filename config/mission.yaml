@@ -9,8 +9,9 @@ search_mission:
     initial_x: 0.0
     initial_y: 0.0
     initial_yaw: 0.0
-    clearance: 0.30           # m, free distance required around a viewpoint
-    transit_clearance: 0.20   # m, free distance defining the reachable region (> robot radius 0.12)
+    clearance: 0.12           # m, free distance required around a viewpoint (+ half a cell)
+    transit_clearance: 0.10   # m, reachable region; + half a cell = 0.135 > robot radius 0.12. Arena corridor
+                              # narrows to ~0.29 m: >= 0.12 cuts the start arm off (1 viewpoint instead of 5)
     max_seed_distance: 1.0
     spacing: 0.9              # m between viewpoints
     headings: 6               # minimum view directions per viewpoint
